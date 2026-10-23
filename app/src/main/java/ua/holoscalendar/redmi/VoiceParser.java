@@ -17,7 +17,8 @@ public final class VoiceParser {
    this.title=title; this.date=date; this.time=time; this.warning=warning;
   }
  }
- private static Pattern pattern(String s) { return Pattern.compile(s, Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS); }
+ // Android already uses Unicode character classes and rejects the Java-only flag (256).
+ private static Pattern pattern(String s) { return Pattern.compile(s, Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE); }
  // A dotted clock requires a time preposition; a bare dotted pair is a date.
  private static final Pattern CLOCK=pattern("(?<![\\p{L}\\d.:/])(?:(?:о|об|на)\\s+\\d{1,2}[.:]\\d{2}|\\d{1,2}:\\d{2})(?![\\p{L}\\d.:/])");
  private static final Pattern DATE=pattern("(?<![\\p{L}\\d])(?:[ув]\\s+)?(\\d{1,2})[./](\\d{1,2})(?:[./](\\d{4}))?(?![\\d./])");
