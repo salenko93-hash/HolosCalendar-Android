@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  pull_request:
 permissions:
   contents: read
 jobs:
@@ -15,16 +16,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Inspect preinstalled Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls -la "$ANDROID_HOME/platforms" || true
-          ls -la "$ANDROID_HOME/build-tools" || true
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;34.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build APK
-        run: gradle --no-daemon --stacktrace assembleDebug
+      - name: Build, lint, and test
+        run: gradle --no-daemon --stacktrace assembleDebug lintDebug testDebugUnitTest
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
