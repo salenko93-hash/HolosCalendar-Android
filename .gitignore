@@ -5,3 +5,6 @@ local.properties
 build/
 app/build/
 .DS_Store
+*.jks
+*.keystore
+HolosCalendar-project.zip

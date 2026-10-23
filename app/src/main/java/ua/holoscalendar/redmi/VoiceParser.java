@@ -19,13 +19,17 @@ public final class VoiceParser {
  }
  private static Pattern pattern(String s) { return Pattern.compile(s, Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS); }
  // A dotted clock requires a time preposition; a bare dotted pair is a date.
- private static final Pattern CLOCK=pattern("(?<![\\p{L}\\d])(?:(?:о|об|на)\\s+\\d{1,2}[.:]\\d{2}|\\d{1,2}:\\d{2})(?!\\d)");
+ private static final Pattern CLOCK=pattern("(?<![\\p{L}\\d.:/])(?:(?:о|об|на)\\s+\\d{1,2}[.:]\\d{2}|\\d{1,2}:\\d{2})(?![\\p{L}\\d.:/])");
  private static final Pattern DATE=pattern("(?<![\\p{L}\\d])(?:[ув]\\s+)?(\\d{1,2})[./](\\d{1,2})(?:[./](\\d{4}))?(?![\\d./])");
  private static final String[] MONTHS={"січня","лютого","березня","квітня","травня","червня","липня","серпня","вересня","жовтня","листопада","грудня"};
  private static final Pattern NAMED=pattern("(?<!\\p{L})(?:[ув]\\s+)?(\\d{1,2})\\s+("+String.join("|",MONTHS)+")(?:\\s+(\\d{4}))?(?!\\p{L})");
  private static final Pattern RELATIVE=pattern("\\b(?:[ув]\\s+)?(післязавтра|завтра|сьогодні)\\b");
  private static final Pattern WEEKDAY=pattern("\\b(?:[ув]\\s+)?(?:(наступного|наступної|наступну)\\s+)?(понеділ(?:ок|ка)|вівтор(?:ок|ка)|серед(?:а|у|и)|четвер(?:га)?|п['’]ятниц(?:я|ю|і)|субот(?:а|у|и)|неділ(?:я|ю|і))\\b");
  private static final Pattern HOUR=pattern("\\b(?:о|об)\\s+(\\d{1,2})(?:\\s+годин(?:і|у)?)?(?![\\d.:])\\b");
+ private static final Pattern OFFSET=pattern("\\bчерез\\s+(?:(\\d{1,3}|одну|дві|три|пів)\\s+)?(хвилин(?:у|и)?|годин(?:у|и)?)\\b");
+ private static String title(StringBuilder remaining) {
+  return remaining.toString().replaceAll("\\s+"," ").replaceAll("^[,.:;\\s]+|[,.:;\\s]+$","");
+ }
  private static void consume(StringBuilder s, Matcher m) { for(int i=m.start();i<m.end();i++) s.setCharAt(i,' '); }
  private static LocalDate date(int d,int m,String y,LocalDate now) {
   if(y!=null) return LocalDate.of(Integer.parseInt(y),m,d);
@@ -39,6 +43,20 @@ public final class VoiceParser {
  public static Result parse(String original, LocalDateTime now) {
   StringBuilder remaining=new StringBuilder(original.trim());
   LocalDate day=null; LocalTime time=null; boolean badDate=false,badTime=false;
+  Matcher offset=OFFSET.matcher(remaining);
+  if(offset.find()) {
+   String amount=offset.group(1),unit=offset.group(2).toLowerCase(Locale.ROOT);
+   double quantity=amount==null || amount.equalsIgnoreCase("одну")?1:amount.equalsIgnoreCase("дві")?2:amount.equalsIgnoreCase("три")?3:amount.equalsIgnoreCase("пів")?0.5:Double.parseDouble(amount);
+   long minutes=(long)(quantity*(unit.startsWith("год")?60:1));
+   consume(remaining,offset);
+   boolean conflict=OFFSET.matcher(remaining).find() || CLOCK.matcher(remaining).find() || DATE.matcher(remaining).find()
+    || NAMED.matcher(remaining).find() || RELATIVE.matcher(remaining).find() || WEEKDAY.matcher(remaining).find() || HOUR.matcher(remaining).find();
+   if(conflict) return new Result(title(remaining),null,null,"Знайдено кілька вказівок часу — оберіть дату й час вручну");
+   if(minutes<1) return new Result(title(remaining),null,null,"Некоректний проміжок часу — оберіть дату й час вручну");
+   LocalDateTime target=now.withSecond(0).withNano(0).plusMinutes(minutes);
+   String name=title(remaining);
+   return new Result(name,target.toLocalDate(),target.toLocalTime(),name.isEmpty()?"Додайте назву події":"Перевірте розпізнані дані");
+  }
   Matcher clock=CLOCK.matcher(remaining);
   if(clock.find()) {
    String[] parts=clock.group().replaceFirst("(?iu)^(?:о|об|на)\\s+", "").split("[.:]");
@@ -78,7 +96,10 @@ public final class VoiceParser {
     consume(remaining,hour);
    }
   }
-  String title=remaining.toString().replaceAll("\\s+"," ").replaceAll("^[,.:;\\s]+|[,.:;\\s]+$","");
+  if(CLOCK.matcher(remaining).find() || DATE.matcher(remaining).find() || NAMED.matcher(remaining).find()
+    || RELATIVE.matcher(remaining).find() || WEEKDAY.matcher(remaining).find() || HOUR.matcher(remaining).find())
+   return new Result(title(remaining),null,null,"Знайдено кілька дат або часів — оберіть дату й час вручну");
+  String title=title(remaining);
   String warning=badDate?"Некоректна дата — оберіть її вручну":badTime?"Некоректний час — оберіть його вручну":day==null?"Оберіть дату":time==null?"Оберіть час":title.isEmpty()?"Додайте назву події":"Перевірте розпізнані дані";
   return new Result(title,day,time,warning);
  }
