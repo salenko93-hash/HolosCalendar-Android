@@ -9,8 +9,13 @@ public final class CalendarEvent {
     public final LocalDateTime localStart;
     public final ZoneId zone;
     public final int durationMinutes;
+    private final Instant exactStart;
 
     public CalendarEvent(String title, LocalDate date, LocalTime time, int durationMinutes, ZoneId zone) {
+        this(title, date, time, durationMinutes, zone, null);
+    }
+
+    public CalendarEvent(String title, LocalDate date, LocalTime time, int durationMinutes, ZoneId zone, Instant exactStart) {
         if (title == null || title.trim().isEmpty()) throw new IllegalArgumentException("Missing title");
         if (date == null || time == null || zone == null) throw new IllegalArgumentException("Missing date, time or zone");
         if (durationMinutes < 1 || durationMinutes > 1440) throw new IllegalArgumentException("Invalid duration");
@@ -18,14 +23,19 @@ public final class CalendarEvent {
         this.localStart = LocalDateTime.of(date, time);
         this.zone = zone;
         this.durationMinutes = durationMinutes;
+        if (exactStart != null && !exactStart.atZone(zone).toLocalDateTime().equals(localStart))
+            throw new IllegalArgumentException("Exact start does not match the local fields");
+        this.exactStart = exactStart;
     }
 
     public boolean isMissingLocalTime() { return offsets().isEmpty(); }
     public boolean isRepeatedLocalTime() { return offsets().size() > 1; }
+    public boolean requiresOffsetConfirmation() { return exactStart == null && isRepeatedLocalTime(); }
     private List<ZoneOffset> offsets() { return zone.getRules().getValidOffsets(localStart); }
 
-    /** First occurrence during an overlap. UI must ask the user before using it. */
+    /** Preserve a known instant; otherwise use the first overlap occurrence after UI confirmation. */
     public long startMillis() {
+        if (exactStart != null) return exactStart.toEpochMilli();
         List<ZoneOffset> values = offsets();
         if (values.isEmpty()) throw new IllegalStateException("Time does not exist in this zone");
         return localStart.toInstant(values.get(0)).toEpochMilli();

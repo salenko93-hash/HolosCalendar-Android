@@ -35,4 +35,10 @@ public class CalendarEventTest {
     private CalendarEvent eventWithTitle(String title) { return new CalendarEvent(title, LocalDate.now(), LocalTime.NOON, 60, kyiv); }
     @Test public void refusesMissingDate() { assertThrows(IllegalArgumentException.class, () -> new CalendarEvent("Зустріч", null, LocalTime.NOON, 60, kyiv)); }
     @Test public void refusesInvalidDuration() { assertThrows(IllegalArgumentException.class, () -> event(LocalDate.now(), LocalTime.NOON, 0)); }
+    @Test public void explicitOverlapStillRequiresConfirmation() {
+        assertTrue(event(LocalDate.of(2026,10,25),LocalTime.of(3,30),60).requiresOffsetConfirmation());
+    }
+    @Test public void exactInstantMustMatchEditableFields() {
+        assertThrows(IllegalArgumentException.class, () -> new CalendarEvent("Нарада",LocalDate.of(2026,11,5),LocalTime.NOON,60,kyiv,Instant.parse("2026-11-05T12:00:00Z")));
+    }
 }

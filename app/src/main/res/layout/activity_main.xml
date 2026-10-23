@@ -17,7 +17,7 @@
             <TextView style="@style/Step" android:text="@string/step_review"/>
             <TextView style="@style/Caption" android:text="@string/review_hint"/>
             <TextView style="@style/Caption" android:text="@string/name_label" android:labelFor="@id/name" android:layout_marginTop="20dp"/>
-            <EditText android:importantForAutofill="no" android:id="@+id/name" style="@style/Field" android:maxLength="200"/>
+            <EditText android:importantForAutofill="no" android:id="@+id/name" style="@style/Field" android:maxLength="1000"/>
             <Button android:id="@+id/date" style="@style/FormButton" android:text="@string/choose_date"/>
             <Button android:id="@+id/time" style="@style/FormButton" android:text="@string/choose_time"/>
             <Button android:id="@+id/duration" style="@style/FormButton"/>

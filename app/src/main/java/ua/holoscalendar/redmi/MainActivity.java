@@ -26,6 +26,7 @@ import java.util.Locale;
 /** One event at a time; the system calendar remains responsible for saving. */
 public final class MainActivity extends Activity {
     private static final int VOICE = 100;
+    private static final int MAX_SPEECH_LENGTH = 1000;
     private static final int[] DURATIONS = {15, 30, 60, 90, 120};
     private static final Locale UK = Locale.forLanguageTag("uk-UA");
     private EditText raw, name;
@@ -36,6 +37,8 @@ public final class MainActivity extends Activity {
     private boolean datePresent, timePresent, sourceDirty;
     private int durationMinutes = 60;
     private boolean statusError;
+    private String lastParsedText = "";
+    private Instant relativeInstant;
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -55,7 +58,7 @@ public final class MainActivity extends Activity {
         durationButton.setOnClickListener(v -> pickDuration());
         findViewById(R.id.save).setOnClickListener(v -> openCalendar());
         findViewById(R.id.help).setOnClickListener(v -> new AlertDialog.Builder(this)
-                .setTitle(R.string.help).setMessage(R.string.help_body).setPositiveButton(android.R.string.ok, null).show());
+                .setTitle(getString(R.string.help_version, getString(R.string.app_version))).setMessage(R.string.help_body).setPositiveButton(android.R.string.ok, null).show());
         findViewById(R.id.clear).setOnClickListener(v -> new AlertDialog.Builder(this)
                 .setTitle(R.string.clear_title).setMessage(R.string.clear_message)
                 .setNegativeButton(R.string.cancel, null).setPositiveButton(R.string.clear, (d, w) -> clear()).show());
@@ -63,8 +66,10 @@ public final class MainActivity extends Activity {
         raw.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                sourceDirty = !s.toString().trim().isEmpty();
-                setStatus(getString(sourceDirty ? R.string.dirty_source : R.string.initial_status), sourceDirty);
+                String current = s.toString().trim();
+                sourceDirty = !current.isEmpty() && !current.equals(lastParsedText);
+                setStatus(getString(sourceDirty ? R.string.dirty_source : current.isEmpty()
+                        ? R.string.initial_status : R.string.review_ready), sourceDirty);
             }
             @Override public void afterTextChanged(Editable s) { }
         });
@@ -88,6 +93,10 @@ public final class MainActivity extends Activity {
     }
 
     private void refresh() {
+        if (relativeInstant != null) {
+            ZonedDateTime local = relativeInstant.atZone(ZoneId.systemDefault());
+            selectedDate = local.toLocalDate(); selectedTime = local.toLocalTime();
+        }
         dateButton.setText(datePresent ? getString(R.string.date_value,
                 selectedDate.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", UK))) : getString(R.string.choose_date));
         timeButton.setText(timePresent ? getString(R.string.time_value,
@@ -105,13 +114,15 @@ public final class MainActivity extends Activity {
     private void parse() {
         String text = raw.getText().toString().trim();
         if (text.isEmpty()) { raw.setError(getString(R.string.empty_input)); raw.requestFocus(); return; }
-        VoiceParser.Result result = VoiceParser.parse(text, LocalDateTime.now());
+        VoiceParser.Result result = VoiceParser.parse(text, ZonedDateTime.now());
+        relativeInstant = result.instant;
         name.setText(result.title);
         name.setError(result.title.isEmpty() ? getString(R.string.missing_name) : null);
         datePresent = result.date != null;
         timePresent = result.time != null;
         if (datePresent) selectedDate = result.date;
         if (timePresent) selectedTime = result.time;
+        lastParsedText = text;
         sourceDirty = false;
         raw.setError(null);
         refresh();
@@ -121,16 +132,25 @@ public final class MainActivity extends Activity {
         findViewById(R.id.status).requestRectangleOnScreen(new android.graphics.Rect(0, 0, status.getWidth(), status.getHeight()));
     }
 
+    private void updateReadiness() {
+        if (sourceDirty) return;
+        setStatus(getString(!datePresent ? R.string.choose_date : !timePresent ? R.string.choose_time
+                : name.getText().toString().trim().isEmpty() ? R.string.missing_name : R.string.review_ready),
+                !datePresent || !timePresent || name.getText().toString().trim().isEmpty());
+    }
+
     private void pickDate() {
         LocalDate initial = datePresent ? selectedDate : LocalDate.now();
         new DatePickerDialog(this, (v, year, month, day) -> {
-            selectedDate = LocalDate.of(year, month + 1, day); datePresent = true; refresh();
+            relativeInstant = null;
+            selectedDate = LocalDate.of(year, month + 1, day); datePresent = true; refresh(); updateReadiness();
         }, initial.getYear(), initial.getMonthValue() - 1, initial.getDayOfMonth()).show();
     }
 
     private void pickTime() {
         new TimePickerDialog(this, (v, hour, minute) -> {
-            selectedTime = LocalTime.of(hour, minute); timePresent = true; refresh();
+            relativeInstant = null;
+            selectedTime = LocalTime.of(hour, minute); timePresent = true; refresh(); updateReadiness();
         }, selectedTime.getHour(), selectedTime.getMinute(), true).show();
     }
 
@@ -147,6 +167,7 @@ public final class MainActivity extends Activity {
         raw.setText(""); name.setText(""); raw.setError(null); name.setError(null);
         selectedDate = LocalDate.now(); selectedTime = LocalTime.NOON;
         datePresent = false; timePresent = false; sourceDirty = false; durationMinutes = 60;
+        lastParsedText = ""; relativeInstant = null;
         setStatus(getString(R.string.initial_status), false); refresh();
     }
 
@@ -168,6 +189,9 @@ public final class MainActivity extends Activity {
         if (result == RESULT_OK && data != null) {
             ArrayList<String> values = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
             if (values != null && !values.isEmpty() && values.get(0) != null && !values.get(0).trim().isEmpty()) {
+                if (values.get(0).length() > MAX_SPEECH_LENGTH) {
+                    setStatus(getString(R.string.voice_too_long), true); return;
+                }
                 raw.setText(values.get(0)); parse(); return;
             }
         }
@@ -175,6 +199,7 @@ public final class MainActivity extends Activity {
     }
 
     private void openCalendar() {
+        refresh();
         if (sourceDirty) { raw.setError(getString(R.string.dirty_source)); raw.requestFocus(); return; }
         String title = name.getText().toString().trim();
         if (title.isEmpty()) { name.setError(getString(R.string.missing_name)); name.requestFocus(); return; }
@@ -182,7 +207,7 @@ public final class MainActivity extends Activity {
             setStatus(getString(!datePresent ? R.string.choose_date : R.string.choose_time), true);
             (!datePresent ? dateButton : timeButton).requestFocus(); return;
         }
-        CalendarEvent event = new CalendarEvent(title, selectedDate, selectedTime, durationMinutes, ZoneId.systemDefault());
+        CalendarEvent event = new CalendarEvent(title, selectedDate, selectedTime, durationMinutes, ZoneId.systemDefault(), relativeInstant);
         if (event.isMissingLocalTime()) { setStatus(getString(R.string.dst_error), true); return; }
         if (event.startMillis() < System.currentTimeMillis()) {
             new AlertDialog.Builder(this).setTitle(R.string.past_title).setMessage(R.string.past_message)
@@ -192,7 +217,7 @@ public final class MainActivity extends Activity {
     }
 
     private void confirmOverlap(CalendarEvent event) {
-        if (event.isRepeatedLocalTime()) {
+        if (event.requiresOffsetConfirmation()) {
             new AlertDialog.Builder(this).setTitle(R.string.dst_overlap_title).setMessage(R.string.dst_overlap_message)
                     .setNegativeButton(R.string.change, null)
                     .setPositiveButton(R.string.continue_action, (d, w) -> insert(event)).show();
@@ -210,6 +235,9 @@ public final class MainActivity extends Activity {
     }
 
     private void restore(Bundle state) {
+        lastParsedText = state.getString("lastParsedText", state.getBoolean("sourceDirty") ? "" : state.getString("raw", ""));
+        String savedInstant = state.getString("relativeInstant");
+        relativeInstant = savedInstant == null ? null : Instant.parse(savedInstant);
         raw.setText(state.getString("raw", "")); name.setText(state.getString("name", ""));
         selectedDate = LocalDate.ofEpochDay(state.getLong("date", selectedDate.toEpochDay()));
         selectedTime = LocalTime.ofSecondOfDay(state.getInt("time", selectedTime.toSecondOfDay()));
@@ -229,6 +257,8 @@ public final class MainActivity extends Activity {
         state.putLong("date", selectedDate.toEpochDay()); state.putInt("time", selectedTime.toSecondOfDay());
         state.putBoolean("datePresent", datePresent); state.putBoolean("timePresent", timePresent);
         state.putInt("duration", durationMinutes); state.putBoolean("sourceDirty", sourceDirty);
+        state.putString("lastParsedText", lastParsedText);
+        if (relativeInstant != null) state.putString("relativeInstant", relativeInstant.toString());
         state.putString("status", status.getText().toString()); state.putBoolean("statusError", statusError);
         super.onSaveInstanceState(state);
     }
