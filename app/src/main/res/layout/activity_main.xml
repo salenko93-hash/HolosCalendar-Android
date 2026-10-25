@@ -24,6 +24,9 @@
             <Button android:id="@+id/date" style="@style/FormButton" android:text="@string/choose_date"/>
             <Button android:id="@+id/time" style="@style/FormButton" android:text="@string/choose_time"/>
             <Button android:id="@+id/duration" style="@style/FormButton"/>
+            <Button android:id="@+id/reminder" style="@style/FormButton" android:text="@string/reminder_off"/>
+            <TextView android:id="@+id/reminder_hint" style="@style/Caption" android:layout_marginTop="8dp" android:text="@string/reminder_local_only"/>
+            <Button android:id="@+id/reminder_settings" style="@style/FormButton" android:text="@string/reminder_settings" android:visibility="gone"/>
             <TextView android:id="@+id/timezone" style="@style/Caption" android:layout_marginTop="12dp"/>
             <TextView android:id="@+id/status" style="@style/Body" android:layout_marginTop="20dp" android:accessibilityLiveRegion="polite" android:text="@string/initial_status"/>
             <Button android:id="@+id/save_local" style="@style/PrimaryButton" android:text="@string/save_local"/>

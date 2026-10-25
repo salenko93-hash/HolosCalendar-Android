@@ -23,7 +23,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Locale;
 
-/** One event at a time; the system calendar remains responsible for saving. */
+/** Edits one local event; optional system-calendar handoff remains a separate action. */
 public final class EventEditorActivity extends Activity {
     static final String EVENT_ID = "eventId";
     private static final int VOICE = 100;
@@ -37,6 +37,7 @@ public final class EventEditorActivity extends Activity {
     private LocalTime selectedTime = LocalTime.NOON;
     private boolean datePresent, timePresent, sourceDirty;
     private Integer durationMinutes;
+    private Integer reminderMinutes;
     private boolean statusError;
     private String lastParsedText = "";
     private Instant relativeInstant;
@@ -58,6 +59,8 @@ public final class EventEditorActivity extends Activity {
         dateButton.setOnClickListener(v -> pickDate());
         timeButton.setOnClickListener(v -> pickTime());
         durationButton.setOnClickListener(v -> pickDuration());
+        findViewById(R.id.reminder).setOnClickListener(v -> pickReminder());
+        findViewById(R.id.reminder_settings).setOnClickListener(v -> ReminderAccess.showSettings(this));
         findViewById(R.id.save).setOnClickListener(v -> openCalendar());
         findViewById(R.id.save_local).setOnClickListener(v -> prepareEvent(true));
         findViewById(R.id.my_calendar).setOnClickListener(v -> showOwnCalendar(datePresent ? selectedDate : LocalDate.now()));
@@ -95,6 +98,7 @@ public final class EventEditorActivity extends Activity {
                 ZonedDateTime start = event.start.atZone(ZoneId.systemDefault());
                 selectedDate = start.toLocalDate(); selectedTime = start.toLocalTime();
                 datePresent = true; timePresent = true; durationMinutes = event.durationMinutes;
+                reminderMinutes = event.reminderMinutes;
                 setStatus(getString(R.string.editing_event), false);
             } catch (SQLiteException | IllegalArgumentException | IllegalStateException | DateTimeException error) {
                 setStatus(getString(R.string.local_read_error), true);
@@ -120,6 +124,12 @@ public final class EventEditorActivity extends Activity {
                 selectedTime.format(DateTimeFormatter.ofPattern("HH:mm", UK))) : getString(R.string.choose_time));
         durationButton.setText(durationMinutes == null ? getString(R.string.duration_unspecified)
                 : getString(R.string.duration_minutes, durationMinutes));
+        ((Button) findViewById(R.id.reminder)).setText(getString(R.string.reminder_label, ReminderAccess.label(this, reminderMinutes)));
+        TextView reminderHint = findViewById(R.id.reminder_hint);
+        reminderHint.setText(reminderMinutes == null ? R.string.reminder_local_only
+                : !ReminderAccess.canNotify(this) ? R.string.reminder_blocked
+                : !ReminderAccess.exactAllowed(this) ? R.string.reminder_inexact : R.string.reminder_local_only);
+        findViewById(R.id.reminder_settings).setVisibility(reminderMinutes != null ? View.VISIBLE : View.GONE);
         ((Button) findViewById(R.id.save_local)).setText(editingId == 0 ? R.string.save_local : R.string.update_local);
         ((TextView) findViewById(R.id.timezone)).setText(getString(R.string.timezone, ZoneId.systemDefault().getId()));
     }
@@ -191,10 +201,24 @@ public final class EventEditorActivity extends Activity {
                 }).setNegativeButton(R.string.cancel, null).show();
     }
 
+    private void pickReminder() {
+        ArrayList<Integer> values = new ArrayList<>(); values.add(null);
+        ArrayList<String> labels = new ArrayList<>(); labels.add(ReminderAccess.label(this, null));
+        for (int value : new int[]{0, 5, 10, 15, 30, 60, 1440}) {
+            values.add(value); labels.add(ReminderAccess.label(this, value));
+        }
+        new AlertDialog.Builder(this).setTitle(R.string.reminder_title)
+                .setSingleChoiceItems(labels.toArray(new String[0]), values.indexOf(reminderMinutes), (dialog, index) -> {
+                    reminderMinutes = values.get(index); dialog.dismiss();
+                    if (reminderMinutes != null) ReminderAccess.requestNotifications(this);
+                    refresh();
+                }).setNegativeButton(R.string.cancel, null).show();
+    }
+
     private void clear() {
         raw.setText(""); name.setText(""); raw.setError(null); name.setError(null);
         selectedDate = LocalDate.now(); selectedTime = LocalTime.NOON;
-        datePresent = false; timePresent = false; sourceDirty = false; durationMinutes = null;
+        datePresent = false; timePresent = false; sourceDirty = false; durationMinutes = null; reminderMinutes = null;
         lastParsedText = ""; relativeInstant = null; editingId = 0;
         findViewById(R.id.save_local).setEnabled(true);
         setStatus(getString(R.string.initial_status), false); refresh();
@@ -258,7 +282,9 @@ public final class EventEditorActivity extends Activity {
     private void complete(CalendarEvent event, boolean local) {
         if (!local) { insert(event); return; }
         try (EventStore store = new EventStore(this)) {
-            editingId = store.save(editingId, event);
+            editingId = store.save(editingId, event, reminderMinutes);
+            ReminderScheduler.cancelNotification(this, editingId);
+            ReminderScheduler.refresh(this);
             refresh();
             setStatus(getString(R.string.local_saved), false);
             Toast.makeText(this, R.string.local_saved, Toast.LENGTH_SHORT).show();
@@ -287,6 +313,7 @@ public final class EventEditorActivity extends Activity {
 
     private void restore(Bundle state) {
         editingId = state.getLong(EVENT_ID);
+        reminderMinutes = state.containsKey("reminder") ? state.getInt("reminder") : null;
         findViewById(R.id.save_local).setEnabled(state.getBoolean("localSaveEnabled", true));
         lastParsedText = state.getString("lastParsedText", state.getBoolean("sourceDirty") ? "" : state.getString("raw", ""));
         String savedInstant = state.getString("relativeInstant");
@@ -307,6 +334,7 @@ public final class EventEditorActivity extends Activity {
 
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putLong(EVENT_ID, editingId);
+        if (reminderMinutes != null) state.putInt("reminder", reminderMinutes);
         state.putBoolean("localSaveEnabled", findViewById(R.id.save_local).isEnabled());
         state.putString("raw", raw.getText().toString()); state.putString("name", name.getText().toString());
         state.putLong("date", selectedDate.toEpochDay()); state.putInt("time", selectedTime.toSecondOfDay());
@@ -319,5 +347,12 @@ public final class EventEditorActivity extends Activity {
         super.onSaveInstanceState(state);
     }
 
-    @Override protected void onResume() { super.onResume(); if (dateButton != null) refresh(); }
+    @Override protected void onResume() {
+        super.onResume(); ReminderAccess.ensureChannel(this); ReminderScheduler.refresh(this);
+        if (dateButton != null) refresh();
+    }
+    @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(request, permissions, results);
+        if (request == ReminderAccess.NOTIFICATION_PERMISSION) { refresh(); ReminderScheduler.refresh(this); }
+    }
 }

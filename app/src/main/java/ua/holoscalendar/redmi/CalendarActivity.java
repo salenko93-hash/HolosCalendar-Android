@@ -45,6 +45,7 @@ public final class CalendarActivity extends Activity {
         } else selectIntentDate(getIntent());
         findViewById(R.id.month_previous).setOnClickListener(v -> changeMonth(-1));
         findViewById(R.id.month_next).setOnClickListener(v -> changeMonth(1));
+        findViewById(R.id.calendar_reminder_settings).setOnClickListener(v -> ReminderAccess.showSettings(this));
         findViewById(R.id.calendar_today).setOnClickListener(v -> {
             selectedDate = LocalDate.now(); month = YearMonth.from(selectedDate); load();
         });
@@ -64,7 +65,13 @@ public final class CalendarActivity extends Activity {
         }
     }
 
-    @Override protected void onResume() { super.onResume(); load(); }
+    @Override protected void onResume() {
+        super.onResume(); ReminderAccess.ensureChannel(this); ReminderScheduler.refresh(this); load();
+    }
+    @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(request, permissions, results);
+        if (request == ReminderAccess.NOTIFICATION_PERMISSION) ReminderScheduler.refresh(this);
+    }
 
     private void changeMonth(int direction) {
         month = month.plusMonths(direction);
@@ -157,9 +164,11 @@ public final class CalendarActivity extends Activity {
         LinearLayout list = findViewById(R.id.calendar_events);
         list.removeAllViews();
         int count = 0;
+        boolean hasReminder = false;
         for (SavedEvent event : entries) {
             if (!event.occursOn(selectedDate, displayZone)) continue;
             count++;
+            hasReminder |= event.reminderMinutes != null;
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL); card.setBackgroundResource(R.drawable.card);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
@@ -174,6 +183,8 @@ public final class CalendarActivity extends Activity {
             text(card, event.title, 20, R.color.ink);
             text(card, event.durationMinutes == null ? getString(R.string.duration_unspecified)
                     : getString(R.string.duration_minutes, event.durationMinutes), 14, R.color.muted);
+            if (event.reminderMinutes != null)
+                text(card, getString(R.string.reminder_label, ReminderAccess.label(this, event.reminderMinutes)), 14, R.color.muted);
             LinearLayout actions = row(); card.addView(actions);
             Button edit = action(getString(R.string.event_edit));
             edit.setContentDescription(getString(R.string.event_edit_description, event.title));
@@ -185,7 +196,9 @@ public final class CalendarActivity extends Activity {
             delete.setOnClickListener(v -> confirmDelete(event));
             actions.addView(delete, new LinearLayout.LayoutParams(0, -2, 1));
         }
-        message(getString(count == 0 ? R.string.calendar_empty : R.string.calendar_day_ready), false);
+        if (hasReminder && !ReminderAccess.canNotify(this)) message(getString(R.string.reminder_blocked), true);
+        else if (hasReminder && !ReminderAccess.exactAllowed(this)) message(getString(R.string.reminder_inexact), false);
+        else message(getString(count == 0 ? R.string.calendar_empty : R.string.calendar_day_ready), false);
     }
 
     private void confirmDelete(SavedEvent event) {
@@ -195,6 +208,8 @@ public final class CalendarActivity extends Activity {
                 .setPositiveButton(R.string.event_delete, (dialog, which) -> worker.execute(() -> {
                     try (EventStore store = new EventStore(getApplicationContext())) {
                         store.delete(event.id);
+                        ReminderScheduler.cancelNotification(this, event.id);
+                        ReminderScheduler.refresh(this);
                         runOnUiThread(() -> { if (!isDestroyed()) load(); });
                     } catch (SQLiteException error) {
                         runOnUiThread(() -> { if (!isDestroyed()) message(getString(R.string.local_write_error), true); });

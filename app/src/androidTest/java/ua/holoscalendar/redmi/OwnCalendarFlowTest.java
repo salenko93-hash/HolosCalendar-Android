@@ -26,8 +26,11 @@ public class OwnCalendarFlowTest {
     private Context context;
     private final List<Long> created = new ArrayList<>();
     @Before public void prepare() { context = InstrumentationRegistry.getInstrumentation().getTargetContext(); }
-    @After public void cleanup() {
-        try (EventStore store = new EventStore(context)) { for (long id : created) store.delete(id); }
+    @After public void cleanup() throws Exception {
+        try (EventStore store = new EventStore(context)) {
+            for (long id : created) { store.delete(id); ReminderScheduler.cancelNotification(context,id); }
+        }
+        ReminderScheduler.refresh(context).get(20,java.util.concurrent.TimeUnit.SECONDS);
     }
     private long seed(String title, Integer duration) {
         try (EventStore store = new EventStore(context)) {
@@ -101,6 +104,25 @@ public class OwnCalendarFlowTest {
                 assertEquals(title + " нова назва",store.find(id).title);
                 assertEquals(Integer.valueOf(45),store.find(id).durationMinutes);
             }
+        } finally { instrumentation.removeMonitor(monitor); }
+    }
+    @Test public void reminderSettingSurvivesRecreationAndUpdatingTheMeeting() {
+        String title=unique(); long id=seed(title,null);
+        try (EventStore store=new EventStore(context)) {
+            SavedEvent old=store.find(id); ZonedDateTime local=old.start.atZone(old.zone);
+            store.save(id,new CalendarEvent(old.title,local.toLocalDate(),local.toLocalTime(),null,old.zone,old.start),15);
+        }
+        Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
+        Instrumentation.ActivityMonitor monitor=blockCalendarLaunch();
+        try (ActivityScenario<EventEditorActivity> scenario=ActivityScenario.launch(new Intent(context,EventEditorActivity.class)
+                .putExtra(EventEditorActivity.EVENT_ID,id))) {
+            scenario.recreate();
+            scenario.onActivity(activity -> {
+                assertEquals(activity.getString(R.string.reminder_label,ReminderAccess.label(activity,15)),
+                        ((TextView)activity.findViewById(R.id.reminder)).getText().toString());
+                activity.findViewById(R.id.save_local).performClick();
+            });
+            try (EventStore store=new EventStore(context)) { assertEquals(Integer.valueOf(15),store.find(id).reminderMinutes); }
         } finally { instrumentation.removeMonitor(monitor); }
     }
     @Test public void missingRecordIsNotSilentlyCreatedAgain() {

@@ -9,8 +9,15 @@ public final class SavedEvent {
     public final Instant start;
     public final ZoneId zone;
     public final Integer durationMinutes;
+    public final Integer reminderMinutes;
+    final Long reminderDeliveredFor;
 
     public SavedEvent(long id, String title, Instant start, ZoneId zone, Integer durationMinutes) {
+        this(id, title, start, zone, durationMinutes, null, null);
+    }
+
+    SavedEvent(long id, String title, Instant start, ZoneId zone, Integer durationMinutes,
+               Integer reminderMinutes, Long reminderDeliveredFor) {
         ZonedDateTime local = start.atZone(zone);
         CalendarEvent validated = new CalendarEvent(title, local.toLocalDate(), local.toLocalTime(),
                 durationMinutes, zone, start);
@@ -19,6 +26,10 @@ public final class SavedEvent {
         this.start = start;
         this.zone = zone;
         this.durationMinutes = durationMinutes;
+        if (reminderMinutes != null && (reminderMinutes < 0 || reminderMinutes > 1440))
+            throw new IllegalArgumentException("Invalid reminder");
+        this.reminderMinutes = reminderMinutes;
+        this.reminderDeliveredFor = reminderDeliveredFor;
     }
 
     public boolean occursOn(LocalDate date, ZoneId displayZone) {

@@ -32,6 +32,7 @@
             android:layout_marginTop="8dp" android:accessibilityLiveRegion="polite" />
         <LinearLayout android:id="@+id/calendar_events" android:layout_width="match_parent"
             android:layout_height="wrap_content" android:orientation="vertical" />
+        <Button android:id="@+id/calendar_reminder_settings" style="@style/FormButton" android:text="@string/reminder_settings" />
         <TextView style="@style/Caption" android:text="@string/local_storage_note"
             android:layout_marginTop="20dp" android:layout_marginBottom="16dp" />
     </LinearLayout>
