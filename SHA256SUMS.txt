@@ -1,0 +1,2 @@
+100a22798833d5b5b5c3948e9de1901732915f20b40332b604de3b0e9b5992ab  HolosCalendar-3.1.0-debug.apk
+c1fe0cae8f269c12556a10fcbb41c8d110fed5efa54c65616ffd9aea87779fba  HolosCalendar-3.1.0-project.zip
