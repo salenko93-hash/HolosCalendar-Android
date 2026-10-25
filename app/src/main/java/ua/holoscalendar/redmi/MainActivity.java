@@ -35,7 +35,7 @@ public final class MainActivity extends Activity {
     private LocalDate selectedDate = LocalDate.now();
     private LocalTime selectedTime = LocalTime.NOON;
     private boolean datePresent, timePresent, sourceDirty;
-    private int durationMinutes = 60;
+    private Integer durationMinutes;
     private boolean statusError;
     private String lastParsedText = "";
     private Instant relativeInstant;
@@ -101,7 +101,8 @@ public final class MainActivity extends Activity {
                 selectedDate.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", UK))) : getString(R.string.choose_date));
         timeButton.setText(timePresent ? getString(R.string.time_value,
                 selectedTime.format(DateTimeFormatter.ofPattern("HH:mm", UK))) : getString(R.string.choose_time));
-        durationButton.setText(getString(R.string.duration_minutes, durationMinutes));
+        durationButton.setText(durationMinutes == null ? getString(R.string.duration_unspecified)
+                : getString(R.string.duration_minutes, durationMinutes));
         ((TextView) findViewById(R.id.timezone)).setText(getString(R.string.timezone, ZoneId.systemDefault().getId()));
     }
 
@@ -116,6 +117,7 @@ public final class MainActivity extends Activity {
         if (text.isEmpty()) { raw.setError(getString(R.string.empty_input)); raw.requestFocus(); return; }
         VoiceParser.Result result = VoiceParser.parse(text, ZonedDateTime.now());
         relativeInstant = result.instant;
+        durationMinutes = result.durationMinutes;
         name.setText(result.title);
         name.setError(result.title.isEmpty() ? getString(R.string.missing_name) : null);
         datePresent = result.date != null;
@@ -155,18 +157,26 @@ public final class MainActivity extends Activity {
     }
 
     private void pickDuration() {
-        int checked = 2;
-        for (int i = 0; i < DURATIONS.length; i++) if (DURATIONS[i] == durationMinutes) checked = i;
+        ArrayList<Integer> values = new ArrayList<>();
+        ArrayList<String> labels = new ArrayList<>();
+        values.add(null); labels.add(getString(R.string.duration_none));
+        for (int value : DURATIONS) {
+            values.add(value); labels.add(getString(R.string.duration_minutes, value));
+        }
+        if (durationMinutes != null && !values.contains(durationMinutes)) {
+            values.add(durationMinutes); labels.add(getString(R.string.duration_minutes, durationMinutes));
+        }
+        int checked = values.indexOf(durationMinutes);
         new AlertDialog.Builder(this).setTitle(R.string.duration_title)
-                .setSingleChoiceItems(R.array.duration_choices, checked, (dialog, index) -> {
-                    durationMinutes = DURATIONS[index]; refresh(); dialog.dismiss();
+                .setSingleChoiceItems(labels.toArray(new String[0]), checked, (dialog, index) -> {
+                    durationMinutes = values.get(index); refresh(); dialog.dismiss();
                 }).setNegativeButton(R.string.cancel, null).show();
     }
 
     private void clear() {
         raw.setText(""); name.setText(""); raw.setError(null); name.setError(null);
         selectedDate = LocalDate.now(); selectedTime = LocalTime.NOON;
-        datePresent = false; timePresent = false; sourceDirty = false; durationMinutes = 60;
+        datePresent = false; timePresent = false; sourceDirty = false; durationMinutes = null;
         lastParsedText = ""; relativeInstant = null;
         setStatus(getString(R.string.initial_status), false); refresh();
     }
@@ -228,7 +238,8 @@ public final class MainActivity extends Activity {
         Intent intent = new Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI);
         intent.putExtra(CalendarContract.Events.TITLE, event.title);
         intent.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, event.startMillis());
-        intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, event.endMillis());
+        if (event.durationMinutes != null)
+            intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, event.endMillis());
         intent.putExtra(CalendarContract.Events.EVENT_TIMEZONE, event.zone.getId());
         try { startActivity(intent); setStatus(getString(R.string.calendar_opened), false); }
         catch (ActivityNotFoundException | SecurityException e) { setStatus(getString(R.string.calendar_missing), true); }
@@ -242,7 +253,7 @@ public final class MainActivity extends Activity {
         selectedDate = LocalDate.ofEpochDay(state.getLong("date", selectedDate.toEpochDay()));
         selectedTime = LocalTime.ofSecondOfDay(state.getInt("time", selectedTime.toSecondOfDay()));
         datePresent = state.getBoolean("datePresent"); timePresent = state.getBoolean("timePresent");
-        durationMinutes = state.getInt("duration", 60); sourceDirty = state.getBoolean("sourceDirty");
+        durationMinutes = state.containsKey("duration") ? state.getInt("duration") : null; sourceDirty = state.getBoolean("sourceDirty");
         setStatus(state.getString("status", getString(R.string.initial_status)), state.getBoolean("statusError"));
     }
 
@@ -256,7 +267,8 @@ public final class MainActivity extends Activity {
         state.putString("raw", raw.getText().toString()); state.putString("name", name.getText().toString());
         state.putLong("date", selectedDate.toEpochDay()); state.putInt("time", selectedTime.toSecondOfDay());
         state.putBoolean("datePresent", datePresent); state.putBoolean("timePresent", timePresent);
-        state.putInt("duration", durationMinutes); state.putBoolean("sourceDirty", sourceDirty);
+        if (durationMinutes != null) state.putInt("duration", durationMinutes);
+        state.putBoolean("sourceDirty", sourceDirty);
         state.putString("lastParsedText", lastParsedText);
         if (relativeInstant != null) state.putString("relativeInstant", relativeInstant.toString());
         state.putString("status", status.getText().toString()); state.putBoolean("statusError", statusError);

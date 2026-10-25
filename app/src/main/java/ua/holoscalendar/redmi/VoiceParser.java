@@ -14,6 +14,8 @@ public final class VoiceParser {
         public final LocalDate date;
         public final LocalTime time;
         public final String warning;
+        /** Null when the phrase does not explicitly specify a valid duration. */
+        public final Integer durationMinutes;
         /** Known instant for a relative command; preserves the correct side of a DST overlap. */
         public final Instant instant;
 
@@ -21,7 +23,11 @@ public final class VoiceParser {
             this(title, date, time, warning, null);
         }
         Result(String title, LocalDate date, LocalTime time, String warning, Instant instant) {
+            this(title, date, time, warning, instant, null);
+        }
+        private Result(String title, LocalDate date, LocalTime time, String warning, Instant instant, Integer durationMinutes) {
             this.title = title; this.date = date; this.time = time; this.warning = warning;
+            this.durationMinutes = durationMinutes;
             this.instant = instant;
         }
     }
@@ -85,8 +91,15 @@ public final class VoiceParser {
     }
 
     public static Result parse(String original, ZonedDateTime zonedNow) {
-        LocalDateTime now = zonedNow.toLocalDateTime();
         StringBuilder remaining = new StringBuilder(original.replaceAll("[\\s\\p{Z}]+", " ").trim());
+        DurationParser.Result duration = DurationParser.consume(remaining);
+        Result temporal = parseDateTime(remaining, zonedNow);
+        String warning = duration.warning == null ? temporal.warning : temporal.warning + ". " + duration.warning;
+        return new Result(temporal.title, temporal.date, temporal.time, warning, temporal.instant, duration.minutes);
+    }
+
+    private static Result parseDateTime(StringBuilder remaining, ZonedDateTime zonedNow) {
+        LocalDateTime now = zonedNow.toLocalDateTime();
         LocalDate day = null; LocalTime time = null;
         boolean badDate = false, badTime = false, dayPart = false;
         Matcher offset = OFFSET.matcher(remaining);

@@ -8,17 +8,18 @@ public final class CalendarEvent {
     public final String title;
     public final LocalDateTime localStart;
     public final ZoneId zone;
-    public final int durationMinutes;
+    /** Null means no end time was specified. */
+    public final Integer durationMinutes;
     private final Instant exactStart;
 
-    public CalendarEvent(String title, LocalDate date, LocalTime time, int durationMinutes, ZoneId zone) {
+    public CalendarEvent(String title, LocalDate date, LocalTime time, Integer durationMinutes, ZoneId zone) {
         this(title, date, time, durationMinutes, zone, null);
     }
 
-    public CalendarEvent(String title, LocalDate date, LocalTime time, int durationMinutes, ZoneId zone, Instant exactStart) {
+    public CalendarEvent(String title, LocalDate date, LocalTime time, Integer durationMinutes, ZoneId zone, Instant exactStart) {
         if (title == null || title.trim().isEmpty()) throw new IllegalArgumentException("Missing title");
         if (date == null || time == null || zone == null) throw new IllegalArgumentException("Missing date, time or zone");
-        if (durationMinutes < 1 || durationMinutes > 1440) throw new IllegalArgumentException("Invalid duration");
+        if (durationMinutes != null && (durationMinutes < 1 || durationMinutes > 1440)) throw new IllegalArgumentException("Invalid duration");
         this.title = title.trim();
         this.localStart = LocalDateTime.of(date, time);
         this.zone = zone;
@@ -40,5 +41,8 @@ public final class CalendarEvent {
         if (values.isEmpty()) throw new IllegalStateException("Time does not exist in this zone");
         return localStart.toInstant(values.get(0)).toEpochMilli();
     }
-    public long endMillis() { return startMillis() + durationMinutes * 60_000L; }
+    public long endMillis() {
+        if (durationMinutes == null) throw new IllegalStateException("Duration was not specified");
+        return startMillis() + durationMinutes * 60_000L;
+    }
 }
