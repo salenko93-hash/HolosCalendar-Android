@@ -18,20 +18,20 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class DurationFlowTest {
-    private void speech(MainActivity activity, String text) {
+    private void speech(EventEditorActivity activity, String text) {
         Intent result = new Intent().putStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS,
                 new ArrayList<>(Collections.singletonList(text)));
         activity.onActivityResult(100, Activity.RESULT_OK, result);
     }
 
-    private void assertDuration(MainActivity activity, Integer minutes) {
+    private void assertDuration(EventEditorActivity activity, Integer minutes) {
         String expected = minutes == null ? activity.getString(R.string.duration_unspecified)
                 : activity.getString(R.string.duration_minutes, minutes);
         assertEquals(expected, ((TextView) activity.findViewById(R.id.duration)).getText().toString());
     }
 
     /** Capture the actual outgoing intent and prevent launching or writing to any real calendar. */
-    private void assertCalendarHandoff(ActivityScenario<MainActivity> scenario, Integer minutes) {
+    private void assertCalendarHandoff(ActivityScenario<EventEditorActivity> scenario, Integer minutes) {
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         AtomicReference<Intent> captured = new AtomicReference<>();
         Instrumentation.ActivityMonitor monitor = new Instrumentation.ActivityMonitor() {
@@ -56,7 +56,7 @@ public class DurationFlowTest {
     }
 
     @Test public void newAndRecreatedFormDoesNotHaveADefaultDuration() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> assertDuration(activity, null));
             scenario.recreate();
             scenario.onActivity(activity -> assertDuration(activity, null));
@@ -64,7 +64,7 @@ public class DurationFlowTest {
     }
 
     @Test public void originalUserPhraseDoesNotSendAnInventedEndTime() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> {
                 speech(activity, "Завтра о 15:00 зустріч з Оленою");
                 assertDuration(activity, null);
@@ -76,7 +76,7 @@ public class DurationFlowTest {
     }
 
     @Test public void spokenDurationSurvivesRecreationAndSetsTheActualEndTime() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> {
                 speech(activity, "Завтра о 15:00 зустріч з Оленою на 45 хвилин");
                 assertDuration(activity, 45);
@@ -89,7 +89,7 @@ public class DurationFlowTest {
     }
 
     @Test public void newPhraseWithoutDurationClearsPreviouslyRecognizedValue() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> {
                 speech(activity, "Завтра о 15 Нарада на півтори години");
                 assertDuration(activity, 90);
@@ -101,7 +101,7 @@ public class DurationFlowTest {
     }
 
     @Test public void cancelledSpeechPreservesRecognizedDuration() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> {
                 speech(activity, "Завтра о 15 Нарада на годину 30 хвилин");
                 activity.onActivityResult(100, Activity.RESULT_CANCELED, null);
@@ -111,7 +111,7 @@ public class DurationFlowTest {
     }
 
     @Test public void relativeStartDoesNotBecomeMeetingDuration() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> {
                 speech(activity, "Через годину Зустріч");
                 assertDuration(activity, null);

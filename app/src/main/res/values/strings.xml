@@ -2,7 +2,7 @@
     <string name="app_name">ГолосКалендар</string>
     <string name="eyebrow">МЕНШЕ ДІЙ. БІЛЬШЕ ЧАСУ.</string>
     <string name="headline">Ваші плани.\nВашими словами.</string>
-    <string name="intro">Скажіть, що й коли. Перевірте деталі — і відкрийте подію в календарі.</string>
+    <string name="intro">Скажіть, що й коли. Перевірте деталі — і збережіть подію у своєму календарі.</string>
     <string name="step_input">01 · РОЗКАЖІТЬ ПРО ПОДІЮ</string>
     <string name="voice">Продиктувати українською</string>
     <string name="raw_label">Або введіть текст</string>
@@ -11,7 +11,7 @@
     <string name="example">Спробувати приклад</string>
     <string name="parse">Розпізнати подію</string>
     <string name="step_review">02 · ПЕРЕВІРТЕ ДЕТАЛІ</string>
-    <string name="review_hint">Розпізнані значення можна змінити. Остаточне збереження — у вашому календарі.</string>
+    <string name="review_hint">Перевірте деталі. Збережіть подію в ГолосКалендарі або відкрийте її в системному календарі.</string>
     <string name="name_label">Назва події</string>
     <string name="choose_date">Оберіть дату</string>
     <string name="choose_time">Оберіть час</string>
@@ -22,10 +22,10 @@
     <string name="duration_none">Не вказано</string>
     <string name="duration_title">Скільки триватиме подія?</string>
 
-    <string name="continue_calendar">Продовжити в календарі</string>
+    <string name="continue_calendar">Відкрити в системному календарі</string>
     <string name="clear">Очистити форму</string>
     <string name="clear_title">Очистити цю подію?</string>
-    <string name="clear_message">Введені дані буде видалено з форми.</string>
+    <string name="clear_message">Дані буде видалено з форми. Збережені події ГолосКалендаря залишаться.</string>
     <string name="cancel">Скасувати</string>
     <string name="change">Змінити</string>
     <string name="continue_action">Продовжити</string>
@@ -34,10 +34,10 @@
     <string name="missing_name">Додайте назву події</string>
     <string name="dirty_source">Текст змінено. Натисніть «Розпізнати подію», щоб оновити деталі.</string>
     <string name="past_title">Подія в минулому</string>
-    <string name="past_message">Вибраний час уже минув. Відкрити цю подію в календарі?</string>
+    <string name="past_message">Вибраний час уже минув. Продовжити з цією подією?</string>
     <string name="dst_error">Цього місцевого часу немає через переведення годинника. Оберіть інший час.</string>
     <string name="dst_overlap_title">Час повторюється двічі</string>
-    <string name="dst_overlap_message">Через переведення годинника вибраний час настає двічі. Подія буде передана для першого входження. Продовжити?</string>
+    <string name="dst_overlap_message">Через переведення годинника вибраний час настає двічі. Для події буде використано перше входження. Продовжити?</string>
     <string name="calendar_opened">Відкрито редактор календаря. Подія збережеться лише після вашого підтвердження в ньому.</string>
     <string name="calendar_missing">Немає доступного календаря для створення подій. Установіть або ввімкніть застосунок календаря.</string>
     <string name="voice_missing">Голосове введення недоступне. Введіть подію текстом.</string>
@@ -45,9 +45,37 @@
     <string name="voice_prompt">Назвіть подію, дату й час</string>
     <string name="privacy_note">Без власного сервера. Голос розпізнає системний сервіс Android; він може використовувати інтернет.</string>
     <string name="help">Як це працює</string>
-    <string name="help_body">Одна фраза — одна подія.\n\nПідтримуються: сьогодні, завтра, післязавтра, дні тижня, дати 05.11 або 25 жовтня, час о 9, о 14:30 або о 14.30; через годину або через 30 хвилин. Тривалість: «на 30 хвилин», «на годину», «на півтори години» або «на 1 годину 30 хвилин». Якщо її не названо, поле залишається порожнім. Тривалість можна вибрати або прибрати вручну. Календар може запропонувати власний час завершення у своєму редакторі.\n\nДату без року шукаємо в майбутньому. «Наступного понеділка» — на тиждень пізніше найближчого понеділка (включно із сьогодні).\n\nСловесний час на кшталт «о другій» та час доби («о 9 вечора») уточніть вручну, обравши час у 24-годинному форматі. Часовий пояс — той, що вибрано на телефоні.\n\nДодаток не читає календар і не зберігає подію самостійно.\n\nЯкщо Google показує «Голосовий пошук недоступний»: перевірте інтернет, дозвіл на мікрофон для Google та оновлення Google і сервісу розпізнавання мовлення. Спробуйте диктування українською в Google або Gboard. Якщо воно також не працює, потрібно налаштувати системний сервіс. До цього можна ввести подію текстом.</string>
+    <string name="help_body">Одна фраза — одна подія.\n\nПідтримуються: сьогодні, завтра, післязавтра, дні тижня, дати 05.11 або 25 жовтня, час о 9, о 14:30 або о 14.30; через годину або через 30 хвилин. Тривалість: «на 30 хвилин», «на годину», «на півтори години» або «на 1 годину 30 хвилин». Якщо її не названо, поле залишається порожнім. Тривалість можна вибрати або прибрати вручну. Календар може запропонувати власний час завершення у своєму редакторі.\n\nДату без року шукаємо в майбутньому. «Наступного понеділка» — на тиждень пізніше найближчого понеділка (включно із сьогодні).\n\nСловесний час на кшталт «о другій» та час доби («о 9 вечора») уточніть вручну, обравши час у 24-годинному форматі. Часовий пояс — той, що вибрано на телефоні.\n\nПодії зберігаються у власному локальному календарі на телефоні. Системний календар відкривається окремою дією. Автоматичної синхронізації між ними немає.\n\nЯкщо Google показує «Голосовий пошук недоступний»: перевірте інтернет, дозвіл на мікрофон для Google та оновлення Google і сервісу розпізнавання мовлення. Спробуйте диктування українською в Google або Gboard. Якщо воно також не працює, потрібно налаштувати системний сервіс. До цього можна ввести подію текстом.</string>
     <string name="timezone">Часовий пояс: %1$s</string>
     <string name="voice_too_long">Команда надто довга (понад 1000 символів). Продиктуйте одну коротшу подію. Попередні дані збережено.</string>
     <string name="review_ready">Перевірте деталі перед переходом у календар.</string>
     <string name="help_version">Як це працює · %1$s</string>
+    <string name="my_calendar">Мій календар</string>
+    <string name="save_local">Зберегти в ГолосКалендарі</string>
+    <string name="update_local">Оновити подію</string>
+    <string name="local_calendar_intro">Ваш календар. Зустрічі — поруч, навіть без інтернету.</string>
+    <string name="calendar_add">＋ Додати подію голосом або текстом</string>
+    <string name="month_previous">Попередній місяць</string>
+    <string name="month_next">Наступний місяць</string>
+    <string name="calendar_today">Сьогодні</string>
+    <string name="calendar_day_description">%1$s, подій: %2$d</string>
+    <string name="calendar_loading">Завантажуємо події…</string>
+    <string name="calendar_empty">На цей день подій поки немає. Додайте першу зустріч.</string>
+    <string name="calendar_day_ready">Події цього дня</string>
+    <string name="local_storage_note">Події зберігаються на цьому телефоні. Автоматичної синхронізації з Google або іншими календарями немає. Видалення застосунку чи очищення його даних видалить локальні події.</string>
+    <string name="event_edit">Редагувати</string>
+    <string name="event_delete">Видалити</string>
+    <string name="event_edit_description">Редагувати подію: %1$s</string>
+    <string name="event_delete_description">Видалити подію: %1$s</string>
+    <string name="event_delete_title">Видалити подію?</string>
+    <string name="event_delete_message">«%1$s» буде видалено з ГолосКалендаря. Події в системному календарі це не змінить.</string>
+    <string name="local_read_error">Не вдалося прочитати локальний календар. Спробуйте ще раз.</string>
+    <string name="local_write_error">Не вдалося змінити локальний календар. Спробуйте ще раз.</string>
+    <string name="event_missing">Цю подію вже видалено. Очистіть форму, щоб створити нову.</string>
+    <string name="editing_event">Редагування збереженої події. Зміни застосуються після натискання «Оновити подію».</string>
+    <string name="local_saved">Збережено в ГолосКалендарі</string>
+    <string name="previous_symbol" translatable="false">‹</string>
+    <string name="next_symbol" translatable="false">›</string>
+    <string name="calendar_day_cell">%1$d%2$s</string>
+    <string name="calendar_time_range">%1$s – %2$s</string>
 </resources>

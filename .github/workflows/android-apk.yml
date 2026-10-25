@@ -51,7 +51,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Allow emulator hardware acceleration
         run: sudo chmod a+rw /dev/kvm
-      - name: Check speech result and Activity lifecycle on Android
+      - name: Check local calendar, speech result, and Activity lifecycle on Android
         uses: reactivecircus/android-emulator-runner@v2
         env:
           ORG_GRADLE_PROJECT_useAlternateMavenCentral: ${{ inputs.alternate_maven_central == true && 'true' || 'false' }}

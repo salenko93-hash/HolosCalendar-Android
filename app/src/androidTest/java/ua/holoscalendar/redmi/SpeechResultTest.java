@@ -25,7 +25,7 @@ public class SpeechResultTest {
     }
 
     @Test public void successfulSpeechResultPopulatesFormWithoutClosing() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> {
                 activity.onActivityResult(100, Activity.RESULT_OK, result("Завтра о 14:30 Зустріч у Києві"));
                 assertEquals("Зустріч у Києві", ((EditText) activity.findViewById(R.id.name)).getText().toString());
@@ -36,7 +36,7 @@ public class SpeechResultTest {
     }
 
     @Test public void cancelledSpeechPreservesExistingForm() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> {
                 ((EditText) activity.findViewById(R.id.name)).setText("Моя подія");
                 activity.onActivityResult(100, Activity.RESULT_CANCELED, null);
@@ -47,7 +47,7 @@ public class SpeechResultTest {
     }
 
     @Test public void speechResultWorksAfterRecreation() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.recreate();
             scenario.onActivity(activity -> {
                 activity.onActivityResult(100, Activity.RESULT_OK, result("Завтра о 9 Нарада"));
@@ -60,7 +60,7 @@ public class SpeechResultTest {
         }
     }
     @Test public void emptySpeechResultPreservesExistingForm() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> {
                 ((EditText) activity.findViewById(R.id.name)).setText("Моя подія");
                 activity.onActivityResult(100, Activity.RESULT_OK, result(" "));
@@ -74,7 +74,7 @@ public class SpeechResultTest {
     }
 
     @Test public void longSpeechIsRejectedWithoutTruncatingExistingForm() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> {
                 EditText raw = activity.findViewById(R.id.raw);
                 raw.setText("Попередній текст");
@@ -88,7 +88,7 @@ public class SpeechResultTest {
     }
 
     @Test public void recognizedTitleIsNotSilentlyTruncatedAtTwoHundredCharacters() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> {
                 String title = repeated('а', 300);
                 activity.onActivityResult(100, Activity.RESULT_OK, result("Завтра о 9 " + title));
@@ -98,7 +98,7 @@ public class SpeechResultTest {
     }
 
     @Test public void revertingSourceAfterRecreationKeepsManualEditsAndDoesNotRequireReparse() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
             scenario.onActivity(activity -> {
                 activity.onActivityResult(100, Activity.RESULT_OK, result("Завтра Нарада"));
                 ((EditText) activity.findViewById(R.id.name)).setText("Моя виправлена назва");
@@ -119,7 +119,7 @@ public class SpeechResultTest {
         TimeZone original = TimeZone.getDefault();
         try {
             TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
-            try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            try (ActivityScenario<EventEditorActivity> scenario = ActivityScenario.launch(EventEditorActivity.class)) {
                 String[] expected = new String[1];
                 scenario.onActivity(activity -> {
                     activity.onActivityResult(100, Activity.RESULT_OK, result("Через годину Нарада"));
