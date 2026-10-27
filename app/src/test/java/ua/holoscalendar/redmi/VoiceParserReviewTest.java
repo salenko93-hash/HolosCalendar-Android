@@ -63,12 +63,12 @@ public class VoiceParserReviewTest {
         assertFalse(event.requiresOffsetConfirmation());
     }
     @Test public void conflictingOffsetHasNoExactInstant() { assertNull(parse("Через годину завтра Нарада").instant); }
-    @Test public void unsupportedEveningHourIsNotSilentlyScheduledInMorning() {
+    @Test public void eveningHourIsResolvedToTwentyOne() {
         var r = parse("Завтра о 9 вечора Нарада");
-        assertNull(r.time); assertTrue(r.warning.contains("час доби")); assertEquals("Нарада", r.title);
+        assertEquals(LocalTime.of(21,0),r.time); assertEquals("Нарада",r.title);
     }
-    @Test public void clockDayPartIsNotLeftInTitleWithAnUnverifiedTime() {
+    @Test public void clockDayPartResolvesAndDoesNotRemainInTitle() {
         var r = parse("Завтра о 9:30 вечора Нарада");
-        assertNull(r.time); assertTrue(r.warning.contains("час доби")); assertEquals("Нарада", r.title);
+        assertEquals(LocalTime.of(21,30),r.time); assertEquals("Нарада",r.title);
     }
 }

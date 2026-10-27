@@ -1,84 +1,74 @@
 package ua.holoscalendar.redmi;
 
 import java.math.BigDecimal;
-import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.*;
+import java.util.regex.*;
 
-/** Explicit duration cues are separate from start offsets such as "через годину". */
+/** Duration is consumed separately from start offsets such as «за пів години». */
 final class DurationParser {
     private DurationParser() { }
-
     static final class Result {
         final Integer minutes;
         final String warning;
-        Result(Integer minutes, String warning) { this.minutes = minutes; this.warning = warning; }
+        final boolean approximate, allDay, untilEndOfDay, needsChoice;
+        Result(Integer minutes,String warning,boolean approximate,boolean allDay,boolean untilEndOfDay,boolean needsChoice) {
+            this.minutes=minutes; this.warning=warning; this.approximate=approximate;
+            this.allDay=allDay; this.untilEndOfDay=untilEndOfDay; this.needsChoice=needsChoice;
+        }
     }
-
-    private static final String ONES = "одну|один|одна|дві|два|три|чотири|п['’ʼ]ять|шість|сім|вісім|дев['’ʼ]ять";
-    private static final String TENS = "двадцять|тридцять|сорок|п['’ʼ]ятдесят";
-    private static final String QUANTITY = "(?:[+-]?\\d+(?:[.,]\\d+)?|півтори|півтора|пів|(?:" + TENS
-            + ")(?:\\s+(?:" + ONES + "))?|десять|п['’ʼ]ятнадцять|" + ONES + ")";
-    private static final String MINUTE = "(?:хвилина|хвилину|хвилини|хвилин|хв)";
-    private static final String HOUR = "(?:година|годину|години|годин|год)";
-    private static final Pattern DURATION = Pattern.compile("(?<![\\p{L}\\d])"
-            + "(?:на|тривалістю|триватиме|протягом|тривалість\\s*:?)\\s+"
-            + "(?:((?:" + QUANTITY + "))\\s*)?(" + HOUR + "|" + MINUTE + ")\\b\\.?"
-            + "(?:\\s+(?:і\\s+)?(" + QUANTITY + ")\\s*(" + MINUTE + ")\\b\\.?)?",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-
-    static Result consume(StringBuilder remaining) {
-        Matcher matcher = DURATION.matcher(remaining);
-        Integer minutes = null;
-        int count = 0;
-        boolean invalid = false;
-        while (matcher.find()) {
-            count++;
+    private static Pattern pattern(String value) { return Pattern.compile(value,Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE); }
+    private static final String MINUTE="(?:хвилин(?:к[ауи]|а|у|и)?|хв)";
+    private static final String HOUR="(?:годин(?:к[ауи]|а|у|и)?|год)";
+    private static final String Q=UkrainianNumbers.QUANTITY;
+    private static final Pattern DURATION=pattern("(?<![\\p{L}\\d])(?:(приблизно|десь)\\s+)?(?:на|тривалістю|триватиме|протягом|тривалість\\s*:?)\\s+"
+            +"(?:("+Q+")\\s*)?("+HOUR+"|"+MINUTE+")\\b\\.?(?:\\s+(?:і\\s+)?("+Q+")\\s*("+MINUTE+")\\b\\.?)?");
+    private static final Pattern REVERSED=pattern("\\bхвилин\\s+на\\s+("+Q+")\\b");
+    private static final Pattern VAGUE=pattern("\\b(?:на\\s+кілька\\s+хвилин|до\\s+кінця\\s+дня)\\b");
+    private static final Pattern ALL_DAY=pattern("\\bна\\s+весь\\s+день\\b");
+    private static final Pattern BARE=pattern("(?<![\\p{L}\\d])("+Q+")\\s*("+HOUR+"|"+MINUTE+")\\b\\.?");
+    private static void erase(StringBuilder text,Matcher match) { for(int i=match.start();i<match.end();i++) text.setCharAt(i,' '); }
+    static Result consume(StringBuilder text) {
+        Integer minutes=null; int count=0; boolean invalid=false,approximate=false,allDay=false,until=false,choice=false;
+        Matcher special=ALL_DAY.matcher(text);
+        if(special.find()) { allDay=true; erase(text,special); count++; }
+        Matcher vague=VAGUE.matcher(text);
+        if(vague.find()) {
+            until=UkrainianNumbers.normalize(vague.group()).startsWith("до"); choice=!until;
+            erase(text,vague); count++;
+        }
+        Matcher normal=DURATION.matcher(text);
+        while(normal.find()) {
+            count++; approximate|=normal.group(1)!=null;
             try {
-                boolean hours = matcher.group(2).toLowerCase(Locale.ROOT).startsWith("год");
-                BigDecimal total = quantity(matcher.group(1)).multiply(BigDecimal.valueOf(hours ? 60 : 1));
-                if (matcher.group(3) != null) {
-                    if (!hours) throw new IllegalArgumentException("Repeated minute unit");
-                    total = total.add(quantity(matcher.group(3)));
+                boolean hours=normal.group(3).toLowerCase(Locale.ROOT).startsWith("год");
+                BigDecimal total=UkrainianNumbers.quantity(normal.group(2)).multiply(BigDecimal.valueOf(hours?60:1));
+                if(normal.group(4)!=null) {
+                    if(!hours) throw new IllegalArgumentException("Repeated minute unit");
+                    total=total.add(UkrainianNumbers.quantity(normal.group(4)));
                 }
-                minutes = total.intValueExact();
-                if (minutes < 1 || minutes > 1440) invalid = true;
-            } catch (IllegalArgumentException | ArithmeticException e) { invalid = true; }
-            // Keep indexes stable for subsequent matches and the date/time parser.
-            for (int i = matcher.start(); i < matcher.end(); i++) remaining.setCharAt(i, ' ');
+                minutes=total.intValueExact(); if(minutes<1||minutes>1440) invalid=true;
+            } catch(IllegalArgumentException|ArithmeticException bad) { invalid=true; }
+            erase(text,normal);
         }
-        if (count > 1) return new Result(null, "Знайдено кілька тривалостей — оберіть одну вручну");
-        if (invalid) return new Result(null, "Некоректна тривалість — оберіть від 1 до 1440 хвилин вручну");
-        return new Result(minutes, null);
-    }
-
-    private static BigDecimal quantity(String text) {
-        if (text == null) return BigDecimal.ONE;
-        String value = text.toLowerCase(Locale.ROOT).replace('’', '\'').replace('ʼ', '\'');
-        if (value.matches("[+-]?\\d+(?:[.,]\\d+)?")) return new BigDecimal(value.replace(',', '.'));
-        if (value.equals("пів")) return new BigDecimal("0.5");
-        if (value.equals("півтори") || value.equals("півтора")) return new BigDecimal("1.5");
-        int total = 0;
-        for (String word : value.split("\\s+")) {
-            switch (word) {
-                case "одну": case "один": case "одна": total += 1; break;
-                case "дві": case "два": total += 2; break;
-                case "три": total += 3; break;
-                case "чотири": total += 4; break;
-                case "п'ять": total += 5; break;
-                case "шість": total += 6; break;
-                case "сім": total += 7; break;
-                case "вісім": total += 8; break;
-                case "дев'ять": total += 9; break;
-                case "десять": total += 10; break;
-                case "п'ятнадцять": total += 15; break;
-                case "двадцять": total += 20; break;
-                case "тридцять": total += 30; break;
-                case "сорок": total += 40; break;
-                case "п'ятдесят": total += 50; break;
-                default: throw new IllegalArgumentException("Unsupported quantity");
-            }
+        Matcher reverse=REVERSED.matcher(text);
+        while(reverse.find()) {
+            count++; approximate=true;
+            try { minutes=UkrainianNumbers.quantity(reverse.group(1)).intValueExact(); if(minutes<1||minutes>1440) invalid=true; }
+            catch(IllegalArgumentException|ArithmeticException bad) { invalid=true; }
+            erase(text,reverse);
         }
-        return BigDecimal.valueOf(total);
+        Matcher bare=BARE.matcher(text);
+        while(bare.find()) {
+            String prefix=text.substring(0,bare.start()).trim().toLowerCase(Locale.ROOT);
+            if(prefix.matches("(?s).*\\b(?:через|за|о|об)$")) continue;
+            count++;
+            try { minutes=UkrainianNumbers.quantity(bare.group(1)).multiply(BigDecimal.valueOf(bare.group(2).toLowerCase(Locale.ROOT).startsWith("год")?60:1)).intValueExact();
+                if(minutes<1||minutes>1440) invalid=true;
+            } catch(IllegalArgumentException|ArithmeticException bad) { invalid=true; }
+            erase(text,bare);
+        }
+        if(count>1) return new Result(null,"Знайдено кілька тривалостей — оберіть одну вручну",false,false,false,true);
+        if(invalid) return new Result(null,"Некоректна тривалість — оберіть від 1 до 1440 хвилин вручну",false,false,false,true);
+        return new Result(minutes,choice?"Уточніть тривалість: «кілька хвилин» не задає точного значення":null,approximate,allDay,until,choice);
     }
 }

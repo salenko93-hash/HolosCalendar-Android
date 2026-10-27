@@ -2,3 +2,6 @@
 gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+
+# Preserve empty final columns in tab-separated language fixtures.
+*.tsv whitespace=-blank-at-eol

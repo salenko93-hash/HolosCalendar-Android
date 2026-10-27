@@ -99,11 +99,11 @@ final class ReminderScheduler {
                 .setData(Uri.parse("holoscalendar://event/" + event.id)).putExtra(EventEditorActivity.EVENT_ID, event.id);
         PendingIntent open = TaskStackBuilder.create(context)
                 .addNextIntent(new Intent(context, CalendarActivity.class)
-                        .putExtra(CalendarActivity.SELECTED_DATE, event.start.atZone(ZoneId.systemDefault()).toLocalDate().toString()))
+                        .putExtra(CalendarActivity.SELECTED_DATE, event.start.atZone(event.allDay?event.zone:ZoneId.systemDefault()).toLocalDate().toString()))
                 .addNextIntent(editor).getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         String time = event.start.atZone(ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("EEEE, d MMMM · HH:mm", Locale.forLanguageTag("uk-UA")));
-        String text = context.getString(R.string.reminder_notification_time, time);
+        String text = event.allDay?context.getString(R.string.all_day_range,event.start.atZone(event.zone).toLocalDate().toString(),event.endDateExclusive.minusDays(1).toString()):context.getString(R.string.reminder_notification_time, time);
         if (event.durationMinutes != null) text += "\n" + context.getString(R.string.duration_minutes, event.durationMinutes);
         Notification publicVersion = new Notification.Builder(context, ReminderAccess.CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification).setContentTitle(context.getString(R.string.app_name))
@@ -112,7 +112,7 @@ final class ReminderScheduler {
                 .setSmallIcon(R.drawable.ic_notification).setContentTitle(event.title).setContentText(text)
                 .setStyle(new Notification.BigTextStyle().bigText(text)).setCategory(Notification.CATEGORY_EVENT)
                 .setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(publicVersion)
-                .setAutoCancel(true).setOnlyAlertOnce(true).setContentIntent(open).build();
+                .setAutoCancel(true).setOnlyAlertOnce(false).setContentIntent(open).build();
     }
 
     static String tag(long id) { return "event:" + id; }

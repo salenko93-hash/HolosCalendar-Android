@@ -42,6 +42,11 @@ public final class EventEditorActivity extends Activity {
     private String lastParsedText = "";
     private Instant relativeInstant;
     private long editingId;
+    private boolean allDay,confirmParsed,durationNeedsChoice,recurrenceNeedsChoice;
+    private LocalDate endDateExclusive;
+    private String recurrence="";
+    private ZoneId eventZone=ZoneId.systemDefault();
+    private final ArrayList<LocalTime> timeChoices=new ArrayList<>();
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -56,6 +61,9 @@ public final class EventEditorActivity extends Activity {
         findViewById(R.id.voice).setOnClickListener(v -> recognize());
         findViewById(R.id.parse).setOnClickListener(v -> parse());
         findViewById(R.id.example).setOnClickListener(v -> { raw.setText(R.string.raw_hint); parse(); });
+        findViewById(R.id.event_type).setOnClickListener(v -> pickType());
+        findViewById(R.id.end_date).setOnClickListener(v -> pickEndDate());
+        findViewById(R.id.recurrence).setOnClickListener(v -> pickRecurrence());
         dateButton.setOnClickListener(v -> pickDate());
         timeButton.setOnClickListener(v -> pickTime());
         durationButton.setOnClickListener(v -> pickDuration());
@@ -94,11 +102,14 @@ public final class EventEditorActivity extends Activity {
                     findViewById(R.id.save_local).setEnabled(false); return;
                 }
                 editingId = id; name.setText(event.title);
-                relativeInstant = event.start;
-                ZonedDateTime start = event.start.atZone(ZoneId.systemDefault());
+                allDay=event.allDay;endDateExclusive=event.endDateExclusive;recurrence=event.recurrence;
+                eventZone=allDay||!recurrence.isEmpty()?event.zone:ZoneId.systemDefault();
+                relativeInstant=allDay?null:event.start;
+                ZonedDateTime start = event.start.atZone(eventZone);
                 selectedDate = start.toLocalDate(); selectedTime = start.toLocalTime();
                 datePresent = true; timePresent = true; durationMinutes = event.durationMinutes;
                 reminderMinutes = event.reminderMinutes;
+                if(allDay) { selectedTime=event.reminderTime==null?LocalTime.NOON:event.reminderTime;timePresent=event.reminderTime!=null; }
                 setStatus(getString(R.string.editing_event), false);
             } catch (SQLiteException | IllegalArgumentException | IllegalStateException | DateTimeException error) {
                 setStatus(getString(R.string.local_read_error), true);
@@ -114,14 +125,23 @@ public final class EventEditorActivity extends Activity {
     }
 
     private void refresh() {
+        // A one-off keeps its instant and follows the phone display zone; a series keeps its wall-time zone.
+        if(!allDay&&recurrence.isEmpty()) eventZone=ZoneId.systemDefault();
         if (relativeInstant != null) {
-            ZonedDateTime local = relativeInstant.atZone(ZoneId.systemDefault());
+            ZonedDateTime local = relativeInstant.atZone(eventZone);
             selectedDate = local.toLocalDate(); selectedTime = local.toLocalTime();
         }
         dateButton.setText(datePresent ? getString(R.string.date_value,
                 selectedDate.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", UK))) : getString(R.string.choose_date));
-        timeButton.setText(timePresent ? getString(R.string.time_value,
-                selectedTime.format(DateTimeFormatter.ofPattern("HH:mm", UK))) : getString(R.string.choose_time));
+        ((Button)findViewById(R.id.event_type)).setText(allDay?R.string.type_all_day:R.string.type_timed);
+        findViewById(R.id.end_date).setVisibility(allDay?View.VISIBLE:View.GONE);
+        ((Button)findViewById(R.id.end_date)).setText(getString(R.string.end_date_value,endDateExclusive==null?"—":endDateExclusive.minusDays(1).toString()));
+        findViewById(R.id.duration).setVisibility(allDay?View.GONE:View.VISIBLE);
+        timeButton.setVisibility(allDay&&reminderMinutes==null?View.GONE:View.VISIBLE);
+        ((Button)findViewById(R.id.recurrence)).setText(getString(R.string.recurrence_value,RecurrenceRule.label(recurrence)));
+        findViewById(R.id.series_hint).setVisibility(recurrence.isEmpty()?View.GONE:View.VISIBLE);
+        timeButton.setText(timePresent ? getString(allDay?R.string.reminder_time_value:R.string.time_value,
+                selectedTime.format(DateTimeFormatter.ofPattern("HH:mm", UK))) : getString(allDay?R.string.choose_reminder_time:R.string.choose_time));
         durationButton.setText(durationMinutes == null ? getString(R.string.duration_unspecified)
                 : getString(R.string.duration_minutes, durationMinutes));
         ((Button) findViewById(R.id.reminder)).setText(getString(R.string.reminder_label, ReminderAccess.label(this, reminderMinutes)));
@@ -130,8 +150,8 @@ public final class EventEditorActivity extends Activity {
                 : !ReminderAccess.canNotify(this) ? R.string.reminder_blocked
                 : !ReminderAccess.exactAllowed(this) ? R.string.reminder_inexact : R.string.reminder_local_only);
         findViewById(R.id.reminder_settings).setVisibility(reminderMinutes != null ? View.VISIBLE : View.GONE);
-        ((Button) findViewById(R.id.save_local)).setText(editingId == 0 ? R.string.save_local : R.string.update_local);
-        ((TextView) findViewById(R.id.timezone)).setText(getString(R.string.timezone, ZoneId.systemDefault().getId()));
+        ((Button) findViewById(R.id.save_local)).setText(editingId == 0 ? R.string.save_local : recurrence.isEmpty()?R.string.update_local:R.string.update_series);
+        ((TextView) findViewById(R.id.timezone)).setText(getString(R.string.timezone, eventZone.getId()));
     }
 
     private void setStatus(String message, boolean error) {
@@ -143,8 +163,12 @@ public final class EventEditorActivity extends Activity {
     private void parse() {
         String text = raw.getText().toString().trim();
         if (text.isEmpty()) { raw.setError(getString(R.string.empty_input)); raw.requestFocus(); return; }
-        VoiceParser.Result result = VoiceParser.parse(text, ZonedDateTime.now());
+        VoiceParser.Result result = VoiceParser.parse(text, ZonedDateTime.now(eventZone));
         relativeInstant = result.instant;
+        allDay=result.allDay;endDateExclusive=result.endDateExclusive;recurrence=result.recurrence;
+        confirmParsed=result.confirmApproximation;durationNeedsChoice=result.durationNeedsChoice;recurrenceNeedsChoice=result.recurrenceNeedsChoice;
+        timeChoices.clear();timeChoices.addAll(result.timeChoices);
+        if(result.reminderMinutes!=null) { reminderMinutes=result.reminderMinutes;ReminderAccess.requestNotifications(this); }
         durationMinutes = result.durationMinutes;
         name.setText(result.title);
         name.setError(result.title.isEmpty() ? getString(R.string.missing_name) : null);
@@ -156,7 +180,7 @@ public final class EventEditorActivity extends Activity {
         sourceDirty = false;
         raw.setError(null);
         refresh();
-        setStatus(result.warning, !datePresent || !timePresent || result.title.isEmpty());
+        setStatus(result.warning, !datePresent || (!allDay||reminderMinutes!=null)&&!timePresent || result.title.isEmpty());
         InputMethodManager keyboard = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
         keyboard.hideSoftInputFromWindow(raw.getWindowToken(), 0);
         findViewById(R.id.status).requestRectangleOnScreen(new android.graphics.Rect(0, 0, status.getWidth(), status.getHeight()));
@@ -164,20 +188,28 @@ public final class EventEditorActivity extends Activity {
 
     private void updateReadiness() {
         if (sourceDirty) return;
-        setStatus(getString(!datePresent ? R.string.choose_date : !timePresent ? R.string.choose_time
+        setStatus(getString(!datePresent ? R.string.choose_date : (!allDay||reminderMinutes!=null)&&!timePresent ? (allDay?R.string.choose_reminder_time:R.string.choose_time)
                 : name.getText().toString().trim().isEmpty() ? R.string.missing_name : R.string.review_ready),
-                !datePresent || !timePresent || name.getText().toString().trim().isEmpty());
+                !datePresent || (!allDay||reminderMinutes!=null)&&!timePresent || name.getText().toString().trim().isEmpty());
     }
 
     private void pickDate() {
         LocalDate initial = datePresent ? selectedDate : LocalDate.now();
         new DatePickerDialog(this, (v, year, month, day) -> {
             relativeInstant = null;
-            selectedDate = LocalDate.of(year, month + 1, day); datePresent = true; refresh(); updateReadiness();
+            LocalDate chosen=LocalDate.of(year,month+1,day);
+            if(allDay) endDateExclusive=chosen.plusDays(endDateExclusive==null?1:Math.max(1,java.time.temporal.ChronoUnit.DAYS.between(selectedDate,endDateExclusive)));
+            selectedDate = chosen; datePresent = true; refresh(); updateReadiness();
         }, initial.getYear(), initial.getMonthValue() - 1, initial.getDayOfMonth()).show();
     }
 
     private void pickTime() {
+        if(!timeChoices.isEmpty()) {
+            String[] labels=new String[timeChoices.size()];for(int i=0;i<labels.length;i++) labels[i]=timeChoices.get(i).toString();
+            new AlertDialog.Builder(this).setTitle(R.string.choose_time_of_day).setItems(labels,(d,index)->{
+                selectedTime=timeChoices.get(index);timeChoices.clear();relativeInstant=null;timePresent=true;refresh();updateReadiness();
+            }).setNeutralButton(R.string.other_time,(d,w)->{timeChoices.clear();pickTime();}).setNegativeButton(R.string.cancel,null).show();return;
+        }
         new TimePickerDialog(this, (v, hour, minute) -> {
             relativeInstant = null;
             selectedTime = LocalTime.of(hour, minute); timePresent = true; refresh(); updateReadiness();
@@ -197,7 +229,7 @@ public final class EventEditorActivity extends Activity {
         int checked = values.indexOf(durationMinutes);
         new AlertDialog.Builder(this).setTitle(R.string.duration_title)
                 .setSingleChoiceItems(labels.toArray(new String[0]), checked, (dialog, index) -> {
-                    durationMinutes = values.get(index); refresh(); dialog.dismiss();
+                    durationMinutes = values.get(index); durationNeedsChoice=false; refresh(); dialog.dismiss();
                 }).setNegativeButton(R.string.cancel, null).show();
     }
 
@@ -215,11 +247,54 @@ public final class EventEditorActivity extends Activity {
                 }).setNegativeButton(R.string.cancel, null).show();
     }
 
+    private void pickType() {
+        new AlertDialog.Builder(this).setTitle(R.string.event_type).setSingleChoiceItems(new String[]{getString(R.string.type_timed),getString(R.string.type_all_day)},allDay?1:0,(dialog,index)->{
+            boolean next=index==1;
+            if(next!=allDay) { allDay=next;relativeInstant=null;timePresent=false;timeChoices.clear();durationMinutes=null;durationNeedsChoice=false; }
+            if(allDay&&(endDateExclusive==null||!endDateExclusive.isAfter(selectedDate))) endDateExclusive=selectedDate.plusDays(1);
+            dialog.dismiss();refresh();updateReadiness();
+        }).setNegativeButton(R.string.cancel,null).show();
+    }
+    private void pickEndDate() {
+        LocalDate initial=endDateExclusive==null?selectedDate:endDateExclusive.minusDays(1);
+        new DatePickerDialog(this,(picker,y,m,d)->{
+            LocalDate end=LocalDate.of(y,m+1,d).plusDays(1);
+            if(!end.isAfter(selectedDate)||java.time.temporal.ChronoUnit.DAYS.between(selectedDate,end)>3660) {setStatus(getString(R.string.bad_end_date),true);return;}
+            endDateExclusive=end;refresh();updateReadiness();
+        },initial.getYear(),initial.getMonthValue()-1,initial.getDayOfMonth()).show();
+    }
+    private void setRecurrence(String rule) {recurrence=rule;recurrenceNeedsChoice=false;refresh();updateReadiness();}
+    private void pickRecurrence() {
+        LocalDate start=datePresent?selectedDate:LocalDate.now();
+        String[] rules={"","D:1","D:2","W:"+start.getDayOfWeek().getValue(),"W:1,2,3,4,5","W:6,7","M:"+start.getDayOfMonth(),"Y:"+start.getMonthValue()+":"+start.getDayOfMonth()};
+        String[] labels=new String[rules.length+3];for(int i=0;i<rules.length;i++) labels[i]=RecurrenceRule.label(rules[i]);
+        labels[rules.length]=getString(R.string.choose_weekdays);labels[rules.length+1]=getString(R.string.choose_fortnight);labels[rules.length+2]=getString(R.string.choose_month_weekday);
+        new AlertDialog.Builder(this).setTitle(R.string.repeat_title).setItems(labels,(dialog,index)->{
+            if(index<rules.length) setRecurrence(rules[index]);
+            else if(index==rules.length+2) pickMonthWeekday();else pickWeekdays(index==rules.length+1);
+        }).setNegativeButton(R.string.cancel,null).show();
+    }
+    private void pickWeekdays(boolean fortnight) {
+        String[] labels=getResources().getStringArray(R.array.weekday_names);boolean[] chosen=new boolean[7];
+        new AlertDialog.Builder(this).setTitle(R.string.choose_weekdays).setMultiChoiceItems(labels,chosen,(d,index,value)->chosen[index]=value)
+                .setPositiveButton(android.R.string.ok,(d,w)->{
+                    ArrayList<String> days=new ArrayList<>();for(int i=0;i<7;i++) if(chosen[i]) days.add(Integer.toString(i+1));
+                    if(days.isEmpty()) {setStatus(getString(R.string.pick_at_least_one_day),true);return;}
+                    setRecurrence((fortnight?"W2:":"W:")+String.join(",",days));
+                }).setNegativeButton(R.string.cancel,null).show();
+    }
+    private void pickMonthWeekday() {
+        new AlertDialog.Builder(this).setTitle(R.string.choose_month_weekday).setItems(R.array.month_week_positions,(dialog,index)->
+            new AlertDialog.Builder(this).setTitle(R.string.choose_weekdays).setItems(R.array.weekday_names,(d,day)->setRecurrence("MN:"+(index==4?-1:index+1)+":"+(day+1)))
+                .setNegativeButton(R.string.cancel,null).show()).setNegativeButton(R.string.cancel,null).show();
+    }
+
     private void clear() {
         raw.setText(""); name.setText(""); raw.setError(null); name.setError(null);
         selectedDate = LocalDate.now(); selectedTime = LocalTime.NOON;
         datePresent = false; timePresent = false; sourceDirty = false; durationMinutes = null; reminderMinutes = null;
         lastParsedText = ""; relativeInstant = null; editingId = 0;
+        allDay=false;endDateExclusive=null;recurrence="";confirmParsed=false;durationNeedsChoice=false;recurrenceNeedsChoice=false;timeChoices.clear();eventZone=ZoneId.systemDefault();
         findViewById(R.id.save_local).setEnabled(true);
         setStatus(getString(R.string.initial_status), false); refresh();
     }
@@ -258,13 +333,20 @@ public final class EventEditorActivity extends Activity {
         if (sourceDirty) { raw.setError(getString(R.string.dirty_source)); raw.requestFocus(); return; }
         String title = name.getText().toString().trim();
         if (title.isEmpty()) { name.setError(getString(R.string.missing_name)); name.requestFocus(); return; }
-        if (!datePresent || !timePresent) {
-            setStatus(getString(!datePresent ? R.string.choose_date : R.string.choose_time), true);
+        if(recurrenceNeedsChoice) {setStatus(getString(R.string.clarify_recurrence),true);findViewById(R.id.recurrence).requestFocus();return;}
+        if(durationNeedsChoice&&!allDay) {setStatus(getString(R.string.clarify_duration),true);durationButton.requestFocus();return;}
+        if (!datePresent || (!allDay||reminderMinutes!=null)&&!timePresent) {
+            setStatus(getString(!datePresent ? R.string.choose_date : allDay?R.string.choose_reminder_time:R.string.choose_time), true);
             (!datePresent ? dateButton : timeButton).requestFocus(); return;
         }
-        CalendarEvent event = new CalendarEvent(title, selectedDate, selectedTime, durationMinutes, ZoneId.systemDefault(), relativeInstant);
+        CalendarEvent event = new CalendarEvent(title, selectedDate, selectedTime, durationMinutes,eventZone,relativeInstant,allDay,endDateExclusive,recurrence);
+        if(allDay&&reminderMinutes!=null&&eventZone.getRules().getValidOffsets(selectedDate.atTime(selectedTime)).isEmpty()) {setStatus(getString(R.string.dst_error),true);return;}
+        if(confirmParsed) {
+            new AlertDialog.Builder(this).setTitle(R.string.confirm_parsed_title).setMessage(R.string.confirm_parsed_message)
+                .setNegativeButton(R.string.change,null).setPositiveButton(R.string.continue_action,(d,w)->{confirmParsed=false;prepareEvent(local);}).show();return;
+        }
         if (event.isMissingLocalTime()) { setStatus(getString(R.string.dst_error), true); return; }
-        if (event.startMillis() < System.currentTimeMillis()) {
+        if (allDay ? !event.endDateExclusive.isAfter(LocalDate.now(eventZone)) : event.startMillis() < System.currentTimeMillis()) {
             new AlertDialog.Builder(this).setTitle(R.string.past_title).setMessage(R.string.past_message)
                     .setNegativeButton(R.string.change, null)
                     .setPositiveButton(R.string.continue_action, (d, w) -> confirmOverlap(event, local)).show();
@@ -272,7 +354,7 @@ public final class EventEditorActivity extends Activity {
     }
 
     private void confirmOverlap(CalendarEvent event, boolean local) {
-        if (event.requiresOffsetConfirmation()) {
+        if (event.requiresOffsetConfirmation() || allDay&&reminderMinutes!=null&&eventZone.getRules().getValidOffsets(selectedDate.atTime(selectedTime)).size()>1) {
             new AlertDialog.Builder(this).setTitle(R.string.dst_overlap_title).setMessage(R.string.dst_overlap_message)
                     .setNegativeButton(R.string.change, null)
                     .setPositiveButton(R.string.continue_action, (d, w) -> complete(event, local)).show();
@@ -282,13 +364,14 @@ public final class EventEditorActivity extends Activity {
     private void complete(CalendarEvent event, boolean local) {
         if (!local) { insert(event); return; }
         try (EventStore store = new EventStore(this)) {
-            editingId = store.save(editingId, event, reminderMinutes);
+            editingId = store.save(editingId,event,reminderMinutes,allDay&&reminderMinutes!=null?selectedTime:null);
             ReminderScheduler.cancelNotification(this, editingId);
             ReminderScheduler.refresh(this);
             refresh();
             setStatus(getString(R.string.local_saved), false);
             Toast.makeText(this, R.string.local_saved, Toast.LENGTH_SHORT).show();
-            showOwnCalendar(selectedDate);
+            LocalDate visibleDate=recurrence.isEmpty()?selectedDate:RecurrenceRule.next(recurrence,selectedDate,selectedDate);
+            showOwnCalendar(visibleDate==null?selectedDate:visibleDate);
         } catch (SQLiteException | IllegalStateException error) {
             setStatus(getString(R.string.local_write_error), true);
         }
@@ -303,16 +386,22 @@ public final class EventEditorActivity extends Activity {
     private void insert(CalendarEvent event) {
         Intent intent = new Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI);
         intent.putExtra(CalendarContract.Events.TITLE, event.title);
-        intent.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, event.startMillis());
-        if (event.durationMinutes != null)
-            intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, event.endMillis());
-        intent.putExtra(CalendarContract.Events.EVENT_TIMEZONE, event.zone.getId());
+        intent.putExtra(CalendarContract.EXTRA_EVENT_ALL_DAY,event.allDay);
+        intent.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME,event.allDay?event.localStart.toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli():event.startMillis());
+        if(event.allDay) intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME,event.endDateExclusive.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli());
+        else if (event.durationMinutes != null) intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, event.endMillis());
+        if(!recurrence.isEmpty()) intent.putExtra(CalendarContract.Events.RRULE,RecurrenceRule.rrule(recurrence));
+        intent.putExtra(CalendarContract.Events.EVENT_TIMEZONE, (event.allDay?"UTC":event.zone.getId()));
         try { startActivity(intent); setStatus(getString(R.string.calendar_opened), false); }
         catch (ActivityNotFoundException | SecurityException e) { setStatus(getString(R.string.calendar_missing), true); }
     }
 
     private void restore(Bundle state) {
         editingId = state.getLong(EVENT_ID);
+        allDay=state.getBoolean("allDay");recurrence=state.getString("recurrence","");eventZone=ZoneId.of(state.getString("eventZone",ZoneId.systemDefault().getId()));
+        endDateExclusive=state.containsKey("endDate")?LocalDate.ofEpochDay(state.getLong("endDate")):null;
+        confirmParsed=state.getBoolean("confirmParsed");durationNeedsChoice=state.getBoolean("durationChoice");recurrenceNeedsChoice=state.getBoolean("recurrenceChoice");
+        timeChoices.clear();ArrayList<String> savedChoices=state.getStringArrayList("timeChoices");if(savedChoices!=null) for(String value:savedChoices) timeChoices.add(LocalTime.parse(value));
         reminderMinutes = state.containsKey("reminder") ? state.getInt("reminder") : null;
         findViewById(R.id.save_local).setEnabled(state.getBoolean("localSaveEnabled", true));
         lastParsedText = state.getString("lastParsedText", state.getBoolean("sourceDirty") ? "" : state.getString("raw", ""));
@@ -334,6 +423,10 @@ public final class EventEditorActivity extends Activity {
 
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putLong(EVENT_ID, editingId);
+        state.putBoolean("allDay",allDay);state.putString("recurrence",recurrence);state.putString("eventZone",eventZone.getId());
+        if(endDateExclusive!=null) state.putLong("endDate",endDateExclusive.toEpochDay());
+        state.putBoolean("confirmParsed",confirmParsed);state.putBoolean("durationChoice",durationNeedsChoice);state.putBoolean("recurrenceChoice",recurrenceNeedsChoice);
+        ArrayList<String> savedChoices=new ArrayList<>();for(LocalTime choice:timeChoices) savedChoices.add(choice.toString());state.putStringArrayList("timeChoices",savedChoices);
         if (reminderMinutes != null) state.putInt("reminder", reminderMinutes);
         state.putBoolean("localSaveEnabled", findViewById(R.id.save_local).isEnabled());
         state.putString("raw", raw.getText().toString()); state.putString("name", name.getText().toString());

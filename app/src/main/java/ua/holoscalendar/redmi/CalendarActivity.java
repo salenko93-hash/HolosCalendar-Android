@@ -95,7 +95,7 @@ public final class CalendarActivity extends Activity {
         message(getString(R.string.calendar_loading), false);
         worker.execute(() -> {
             try (EventStore store = new EventStore(getApplicationContext())) {
-                List<SavedEvent> loaded = store.between(first, end);
+                List<SavedEvent> loaded = store.between(first, end,displayZone);
                 runOnUiThread(() -> {
                     if (isDestroyed() || token != request) return;
                     entries = loaded; render();
@@ -179,14 +179,15 @@ public final class CalendarActivity extends Activity {
             String timing = event.durationMinutes == null ? start
                     : getString(R.string.calendar_time_range, start, event.start.plusSeconds(event.durationMinutes * 60L).atZone(displayZone)
                     .format(DateTimeFormatter.ofPattern("d MMM HH:mm", UK)));
-            text(card, timing, 16, R.color.muted);
+            text(card,event.allDay?getString(R.string.all_day_range,event.start.atZone(event.zone).toLocalDate().toString(),event.endDateExclusive.minusDays(1).toString()):timing,16,R.color.muted);
             text(card, event.title, 20, R.color.ink);
-            text(card, event.durationMinutes == null ? getString(R.string.duration_unspecified)
+            if(!event.allDay) text(card, event.durationMinutes == null ? getString(R.string.duration_unspecified)
                     : getString(R.string.duration_minutes, event.durationMinutes), 14, R.color.muted);
+            if(!event.recurrence.isEmpty()) text(card,RecurrenceRule.label(event.recurrence),14,R.color.muted);
             if (event.reminderMinutes != null)
                 text(card, getString(R.string.reminder_label, ReminderAccess.label(this, event.reminderMinutes)), 14, R.color.muted);
             LinearLayout actions = row(); card.addView(actions);
-            Button edit = action(getString(R.string.event_edit));
+            Button edit = action(getString(event.recurrence.isEmpty()?R.string.event_edit:R.string.series_edit));
             edit.setContentDescription(getString(R.string.event_edit_description, event.title));
             edit.setOnClickListener(v -> startActivity(new Intent(this, EventEditorActivity.class).putExtra(EventEditorActivity.EVENT_ID, event.id)));
             actions.addView(edit, new LinearLayout.LayoutParams(0, -2, 1));
@@ -203,7 +204,7 @@ public final class CalendarActivity extends Activity {
 
     private void confirmDelete(SavedEvent event) {
         new AlertDialog.Builder(this).setTitle(R.string.event_delete_title)
-                .setMessage(getString(R.string.event_delete_message, event.title))
+                .setMessage(getString(event.recurrence.isEmpty()?R.string.event_delete_message:R.string.series_delete_message, event.title))
                 .setNegativeButton(R.string.cancel, null)
                 .setPositiveButton(R.string.event_delete, (dialog, which) -> worker.execute(() -> {
                     try (EventStore store = new EventStore(getApplicationContext())) {

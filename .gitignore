@@ -8,3 +8,7 @@ app/build/
 *.jks
 *.keystore
 HolosCalendar-project.zip
+
+# Python PDF generator
+__pycache__/
+*.py[cod]

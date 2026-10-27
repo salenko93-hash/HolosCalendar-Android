@@ -7,7 +7,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [main, 'holoscalendar-*']
+    branches: [main, 'holoscalendar-*', '!holoscalendar-apk-*']
   pull_request:
 permissions:
   contents: read
@@ -98,8 +98,32 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-      - name: Package full project
-        run: git archive --format=zip --prefix=HolosCalendar/ --output=HolosCalendar-project.zip HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate Ukrainian PDF guide
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-dejavu-core
+          python3 -m pip install -r tools/requirements-pdf.txt
+          python3 tools/build_language_guide.py HolosCalendar-Ukrainian.pdf
+      - name: Upload Ukrainian PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: HolosCalendar-Ukrainian-PDF
+          path: HolosCalendar-Ukrainian.pdf
+          if-no-files-found: error
+          retention-days: 14
+      - name: Package full project with APK and PDF
+        run: |
+          git archive --format=zip --prefix=HolosCalendar/ --output=HolosCalendar-project.zip HEAD
+          python3 - <<'PYTHON'
+          import zipfile
+          with zipfile.ZipFile('HolosCalendar-project.zip', 'a', compression=zipfile.ZIP_DEFLATED) as archive:
+              archive.write('app/build/outputs/apk/debug/app-debug.apk', 'HolosCalendar/APK/HolosCalendar-debug.apk')
+              archive.write('HolosCalendar-Ukrainian.pdf', 'HolosCalendar/Docs/HolosCalendar-Ukrainian.pdf')
+              assert archive.testzip() is None
+          PYTHON
       - name: Upload full project
         uses: actions/upload-artifact@v4
         with:

@@ -140,6 +140,6 @@ public class SpeechResultTest {
         assertNull(VoiceParser.parse("25 жовтня 20270 о 9 Нарада", now).date);
         assertEquals("Нарада", VoiceParser.parse("Нарада на 05.11 о 9", now).title);
         assertEquals("Нарада", VoiceParser.parse("Завтра о\u00a014:30 Нарада", now).title);
-        assertNull(VoiceParser.parse("Завтра о 9 вечора Нарада", now).time);
+        assertEquals(LocalTime.of(21,0),VoiceParser.parse("Завтра о 9 вечора Нарада", now).time);
     }
 }
